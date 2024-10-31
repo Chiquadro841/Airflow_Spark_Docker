@@ -1,0 +1,7 @@
+# Usa l'immagine di base di Bitnami per Spark
+FROM bitnami/spark:latest
+
+
+
+
+

@@ -1,0 +1,6 @@
+
+
+TEST CONNESSIONE
+
+docker exec -it sparkairflow-webserver-1 /bin/bash
+curl http://sparkairflow-spark-master-1:8080

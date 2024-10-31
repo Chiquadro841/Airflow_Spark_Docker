@@ -1,0 +1,139 @@
+version: '3.8'
+
+services:
+
+  airflow-init:                # INIT
+    image: apache/airflow:2.7.2
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+    entrypoint: ["airflow","db","init"]
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./plugins:/opt/airflow/plugins
+      - ./logs:/opt/airflow/logs
+      - ./postgres_data:/var/lib/postgresql/data
+    restart: "no"
+    networks:
+      - spark-cluster
+
+  postgres:               # DB POSTGRES
+    image: postgres:13
+    environment:
+      - POSTGRES_USER=airflow
+      - POSTGRES_PASSWORD=airflow
+      - POSTGRES_DB=airflow
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - spark-cluster
+    
+
+  webserver:               #  WEBSERVER
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    restart: always
+    ports:
+      - "8080:8080"  
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__WEBSERVER__SECRET_KEY=your_secret_key_here
+      - AIRFLOW__LOGGING__BASE_LOG_FOLDER=/opt/airflow/logs
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./plugins:/opt/airflow/plugins
+      - ./logs:/opt/airflow/logs
+      - shared_volume:/opt/bitnami/java
+    command: ["airflow", "webserver"]
+    depends_on:
+      - spark-master
+      - spark-worker-1
+      - spark-worker-2
+    networks:
+      - spark-cluster
+
+
+  scheduler:               #  SCHEDULER
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    restart: always
+    depends_on:
+      - postgres
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=postgresql+psycopg2://airflow:airflow@postgres/airflow
+      - AIRFLOW__WEBSERVER__SECRET_KEY=your_secret_key_here
+    command: ["airflow", "scheduler"]
+    volumes:
+      - shared_volume:/opt/bitnami/java
+    networks:
+      - spark-cluster
+
+
+  spark-master:                   # SPARK MASTER
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_HOST=spark-master
+      - SPARK_MASTER_PORT=7077
+      - SPARK_MASTER_WEBUI_PORT=8080
+      - SPARK_DRIVER_MAX_RESULT_SIZE=2g
+      - SPARK_NETWORK_TIMEOUT=800s
+      - SPARK_RPC_MESSAGE_MAX_SIZE=512m
+      - JAVA_HOME=/opt/bitnami/java
+
+    ports:
+      - "7077:7077"  
+      - "8081:8081"   
+    volumes:
+      - ./dags:/opt/bitnami/spark/dags
+      - shared_volume:/opt/bitnami/java
+    networks:
+      - spark-cluster
+
+
+  spark-worker-1:                       # WORKER 1
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    depends_on:
+      - spark-master
+
+    volumes:
+      - ./dags:/opt/bitnami/spark/dags
+    networks:
+      - spark-cluster
+
+
+  spark-worker-2:                                  #   WORKER 2
+    build:
+      context: .
+      dockerfile: Dockerfile.spark
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark-master:7077
+    depends_on:
+      - spark-master
+    volumes:
+      - ./dags:/opt/bitnami/spark/dags
+    networks:
+      - spark-cluster
+
+
+networks:
+  spark-cluster:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  shared_volume:
+

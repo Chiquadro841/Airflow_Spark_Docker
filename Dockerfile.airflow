@@ -1,0 +1,40 @@
+FROM apache/airflow:latest-python3.12
+
+# Usa l'utente root per installare i pacchetti di sistema
+USER root
+
+# Aggiorna e installa pip (se non è già installato)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    procps && \
+    rm -rf /var/lib/apt/lists/*
+
+# Imposta JAVA_HOME come variabile d'ambiente
+ENV JAVA_HOME=/opt/bitnami/java
+
+USER airflow
+# Installa il provider Spark e il provider OpenLineage compatibile
+RUN pip install apache-airflow-providers-apache-spark \
+    apache-airflow-providers-openlineage==1.12.1
+
+# Copia i file necessari nel container
+COPY ./dags /opt/airflow/dags
+COPY ./dags /opt/bitnami/spark/dags
+COPY ./plugins /opt/airflow/plugins
+COPY ./logs /opt/airflow/logs
+    
+
+
+
+
+#docker-compose exec webserver bash
+
+#  airflow users create \
+#    --username admin \
+#    --firstname Admin \
+#    --lastname User \
+#    --role Admin \
+#    --email admin@example.com
+
+
+
